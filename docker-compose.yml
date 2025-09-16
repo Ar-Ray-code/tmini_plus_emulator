@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  emulator-stream:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: tmini-plus-emulator-stream
+    working_dir: "/"
+    privileged: true
+    command: [
+      "./tmini_plus_emulator/linux/build/tmini_plus_emulator",
+      "/dev/ttyACM0",
+      "./tmini_plus_emulator/data/example_data.txt",
+      "--stream"
+    ]
+    tty: true
+    volumes:
+      - /dev:/dev
+
+  emulator-once:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: tmini-plus-emulator-once
+    working_dir: "/"
+    privileged: true
+    command: [
+      "./tmini_plus_emulator/linux/build/tmini_plus_emulator",
+      "/dev/ttyACM0",
+      "./tmini_plus_emulator/data/example_data.txt"
+    ]
+    tty: true
+    volumes:
+      - /dev:/dev
