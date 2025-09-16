@@ -33,6 +33,9 @@ Run the emulator ([example_data.txt](data/example_data.txt) is provided)
 ```bash
 cd <path to build directory>
 ./tmini_plus_emulator /tmp/ttyEMUL ../../data/example_data.txt
+
+## If you want to stream the data repeatedly, use the --stream option
+# ./tmini_plus_emulator /tmp/ttyEMUL ./tmini_plus_emulator/data/example_data.txt --stream
 ```
 
 ### Terminal 3 (YDLidar ROS side)
@@ -56,5 +59,9 @@ rviz2
 ```
 <img width="885" height="572" alt="Screenshot from 2025-09-16 18-45-19" src="https://github.com/user-attachments/assets/1053105b-7d19-450f-9854-ebad7b881f96" />
 
+
+## References
+
+[YDLDIAR T-MINI PLUS DEVELOPMENT MANUAL](https://cdn.soselectronic.com/productdata/1f/ec/c83edf83/t-mini-plus.pdf)
 
 

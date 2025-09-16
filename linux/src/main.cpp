@@ -55,11 +55,19 @@ ParsedData parse_text_file(const std::string &path) {
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    std::cerr << "Usage: " << argv[0] << " <tty device path> <target file path>\n";
+    std::cerr << "Usage: " << argv[0] << " <tty device path> <target file path> [--stream]\n";
     return 1;
   }
   std::string tty = argv[1];
   std::string text = argv[2];
+
+  bool stream_mode = false;
+  for (int i = 3; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--stream") {
+      stream_mode = true;
+    }
+  }
 
   double pps = 90.0;
 
@@ -77,7 +85,7 @@ int main(int argc, char **argv) {
 
     std::vector<uint8_t> rbuf;
     rbuf.reserve(1024);
-    bool scanning = false;
+    bool scanning = stream_mode; // in stream mode, start streaming immediately
     size_t frame_idx = 0; // for text replay
     using clock = std::chrono::steady_clock;
     auto period = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(1.0 / pps));
@@ -95,37 +103,41 @@ int main(int argc, char **argv) {
         uint8_t buf[64];
         ssize_t nr = read(fd, buf, sizeof(buf));
         if (nr > 0) {
-          rbuf.insert(rbuf.end(), buf, buf + nr);
+          if (!stream_mode) {
+            rbuf.insert(rbuf.end(), buf, buf + nr);
+          }
         }
       }
 
-      while (rbuf.size() >= 2) {
-        if (rbuf[0] != 0xA5) {
-          rbuf.erase(rbuf.begin());
-          continue;
-        }
-        std::vector<uint8_t> cmd{rbuf[0], rbuf[1]};
-        rbuf.erase(rbuf.begin(), rbuf.begin() + 2);
-
-        std::string key(reinterpret_cast<const char *>(cmd.data()), cmd.size());
-        auto it = parsed.cmd_to_resp.find(key);
-        const std::vector<uint8_t> *resp = (it != parsed.cmd_to_resp.end()) ? &it->second : nullptr;
-
-        if (cmd.size() >= 2 && cmd[0] == 0xA5 && cmd[1] == 0x60) {
-          if (!resp && parsed.start_ack)
-            resp = &*parsed.start_ack;
-          if (resp && !resp->empty()) {
-            (void)write(fd, resp->data(), resp->size());
+      if (!stream_mode) {
+        while (rbuf.size() >= 2) {
+          if (rbuf[0] != 0xA5) {
+            rbuf.erase(rbuf.begin());
+            continue;
           }
-          scanning = true;
-          frame_idx = 0;
-          next_send = clock::now();
-          t0 = next_send;
-        } else if (cmd.size() >= 2 && cmd[0] == 0xA5 && cmd[1] == 0x65) {
-          scanning = false;
-        } else {
-          if (resp && !resp->empty()) {
-            (void)write(fd, resp->data(), resp->size());
+          std::vector<uint8_t> cmd{rbuf[0], rbuf[1]};
+          rbuf.erase(rbuf.begin(), rbuf.begin() + 2);
+
+          std::string key(reinterpret_cast<const char *>(cmd.data()), cmd.size());
+          auto it = parsed.cmd_to_resp.find(key);
+          const std::vector<uint8_t> *resp = (it != parsed.cmd_to_resp.end()) ? &it->second : nullptr;
+
+          if (cmd.size() >= 2 && cmd[0] == 0xA5 && cmd[1] == 0x60) {
+            if (!resp && parsed.start_ack)
+              resp = &*parsed.start_ack;
+            if (resp && !resp->empty()) {
+              (void)write(fd, resp->data(), resp->size());
+            }
+            scanning = true;
+            frame_idx = 0;
+            next_send = clock::now();
+            t0 = next_send;
+          } else if (cmd.size() >= 2 && cmd[0] == 0xA5 && cmd[1] == 0x65) {
+            scanning = false;
+          } else {
+            if (resp && !resp->empty()) {
+              (void)write(fd, resp->data(), resp->size());
+            }
           }
         }
       }
