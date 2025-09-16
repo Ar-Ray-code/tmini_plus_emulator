@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    types: [opened, synchronize, labeled]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    if: |
+      ((github.event.action == 'labeled') && (github.event.label.name == 'TESTING') && (github.base_ref == 'main' )) ||
+      ((github.event.action == 'synchronize') && (github.base_ref == 'main') && contains(github.event.pull_request.labels.*.name, 'TESTING')) ||
+      (github.ref_name == 'main')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake socat
+
+      - name: Configure and build (CMake)
+        run: |
+          mkdir -p linux/build
+          cd linux/build
+          cmake ..
+          cmake --build . -- -j"$(nproc)"
+
+      - name: Quick PTY integration smoke test
+        run: |
+          set -euo pipefail
+          # Create a virtual PTY pair
+          socat -d -d pty,raw,echo=0,link=/tmp/ttyEMUL pty,raw,echo=0,link=/tmp/ttyROS &
+          SOCAT_PID=$!
+          # Give socat time to create PTYs
+          sleep 0.5
+
+          # Start emulator (non-stream) against the PTY
+          timeout 5s ./linux/build/tmini_plus_emulator /tmp/ttyEMUL data/example_data.txt &
+          EMU_PID=$!
+          sleep 0.5
+
+          # Send START command (0xA5 0x60) to trigger responses
+          printf "\xA5\x60" > /tmp/ttyROS
+
+          # Expect at least 1 byte back on the paired PTY within 1s
+          if timeout 1s dd if=/tmp/ttyROS bs=1 count=1 status=none > /dev/null; then
+            echo "Received data from emulator over PTY"
+            STATUS=0
+          else
+            echo "Did not receive data from emulator over PTY" >&2
+            STATUS=1
+          fi
+
+          # Cleanup
+          kill $EMU_PID 2>/dev/null || true
+          kill $SOCAT_PID 2>/dev/null || true
+          exit $STATUS
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -f docker/Dockerfile -t tmini_plus_emulator:ci .
+
