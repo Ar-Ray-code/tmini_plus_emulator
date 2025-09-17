@@ -64,6 +64,10 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    if: |
+      ((github.event.action == 'labeled') && (github.event.label.name == 'TESTING') && (github.base_ref == 'main' )) ||
+      ((github.event.action == 'synchronize') && (github.base_ref == 'main') && contains(github.event.pull_request.labels.*.name, 'TESTING')) ||
+      (github.ref_name == 'main')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
